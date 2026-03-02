@@ -125,13 +125,13 @@ To fix spelling/formatting variation, you can pass mapping rules to `standardize
 - TSV mapping file (repeatable): `--map-tsv replacements.tsv`
   Example `replacements.tsv` (TAB-separated; lines starting with `#` are ignored):
 
-  ```tsv
+```tab-delimited file 
 # column	from	to
 tissue	Leaves	Leaf
 tissue	ROOTS	Root
 treatment	25.0 degrees	25 °C
 treatment	42 Degree	42 °C
-  ```
+```
 - Inline rules (repeatable): `--replace 'tissue:Leaves=leaf'`
 
 ## Partial runs / resume
