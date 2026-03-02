@@ -85,14 +85,6 @@ For the RGAP7 data, please download files from https://rice.uga.edu/download_osa
 #   - data/Os_proteins.fasta (+ BLAST DB files)
 #   - data/Os_gene_annotation_list.tsv
 bash scripts/build_os_data.sh --data-dir data --threads 8
-
-# Optional: verify the annotation TSV against a known-good file (byte-identical check)
-# python3 scripts/build_Os_annotation.py \
-#   --gene-en data/gene_en_os_list.tsv \
-#   --func    data/osa1_r7.all_models.functional_annotation.txt \
-#   --goslim  data/osa1_r7.all_models.GOSlim.txt \
-#   --out     data/Os_gene_annotation_list.tsv \
-#   --check-equal /path/to/gold/Os_gene_annotation_list.tsv
 ```
 
 `blastp_annot.sh` expects the following files under `./data/` (repository root):
