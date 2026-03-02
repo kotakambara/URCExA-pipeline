@@ -75,7 +75,7 @@ STAR --runThreadN 24 \
   
 - Rice datasets: RGAP 7, from the Rice Genome Annotation Project (RGAP, Kawahara et al., 2013) (https://doi.org/10.1186/1939-8433-6-4)  
   and Oryzabase (Kurata and Yamazaki, 2006, https://doi.org/10.1104/pp.105.063008).  
-  For the rice datasets, please download files from https://rice.uga.edu/download_osa1r7.shtml /https://shigen.nig.ac.jp/rice/oryzabase/download/gene  
+  For the rice datasets, please download files from https://rice.uga.edu/download_osa1r7.shtml and https://shigen.nig.ac.jp/rice/oryzabase/download/gene  
   and create the protein BLAST DBs and annotation files using the following command:  
 
 ```bash
