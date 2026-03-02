@@ -54,14 +54,15 @@ Python 3 + modules:
 ### 
 0) Prepare reference files
 
-1) Build STAR index (example):
+1) Build STAR index (example):  
+- If possible, please prepare a GTF-format annotation file and use it for generating the STAR index.　　
 
 ```bash
 STAR --runThreadN 24 \
   --runMode genomeGenerate \
   --genomeDir /path/to/star_index \
   --genomeFastaFiles genome.fa \
-  --sjdbGTFfile genes.gff3 \
+  --sjdbGTFfile genes.gtf \
   --sjdbOverhang 100
 ```
 
