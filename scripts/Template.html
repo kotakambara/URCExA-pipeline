@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>RNA-seq database</title>
+
+  <!-- Plotly本体（インタラクティブプロット用） -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <!-- CSVパース用ライブラリ（Papaparse） -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --control-width: 260px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+      color: #222;
+    }
+
+    header {
+      background: #2c3e50;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    header p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .header-left { min-width: 0; }
+
+    .top-nav {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      white-space: nowrap;
+      margin-top: 0;
+    }
+
+    .top-nav a {
+      color: #fff;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 700;
+      opacity: 0.95;
+    }    
+
+    .top-nav a:hover {
+      text-decoration: underline;
+      opacity: 1;
+    }
+
+    @media (max-width: 720px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .top-nav {
+        width: 100%;
+        justify-content: flex-end;
+      }
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 16px auto 40px;
+      padding: 12px 16px 24px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .controls {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 10px 22px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+    .controls > div {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+      align-items: flex-start;
+    }
+    .controls .control-full{ /* deprecated (kept for backward compatibility) */
+      grid-column: 1 / -1;
+    }
+
+    /* --- Control placement (top area) --- */
+#ref-control { grid-column: 1 / span 4; grid-row: 1; }
+#gene-control { grid-column: 1 / span 4; grid-row: 2; }
+#group-control { grid-column: 5 / span 4; grid-row: 2; }
+#similar-control { grid-column: 9 / -1; grid-row: 2; }
+/* Filters + keyword search: stop at the Generate Plot area (do not extend under similarity panel) */
+#kw-control {
+  grid-column: 1 / span 8;
+  grid-row: 3;
+
+  /* tighten the vertical gap from the "Displayed the plot..." line above */
+  margin-top: 0;
+
+  /* inner layout: match widths with the left column (Gene ID area) */
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  row-gap: 8px;
+}
+label {
+      font-weight: 600;
+    }
+
+    input[type="text"], select {
+  padding: 6px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+    input[type="text"][disabled] {
+      background: #f2f2f2;
+      color: #666;
+    }
+
+    button {
+      padding: 8px 14px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      background: #3498db;
+      color: #fff;
+    }
+
+    button:disabled {
+      background: #bdc3c7;
+      cursor: default;
+    }
+
+
+    .inline-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* Keep "Group by" select + "Generate Plot" button on the same line (desktop) */
+#group-control .inline-row select {
+  width: auto;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+#plot-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 10px 18px;
+}
+      
+    .kw-label {
+      font-weight: 600;
+      margin-top: 2px;
+      }
+
+    .switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  margin-top: 0;
+}
+
+/* --- Tighten spacing between "Displayed the plot..." and the checkboxes (independent of the similarity panel height) --- */
+#gene-control .status {
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+#gene-control .switch-row {
+  width: 100%;
+  margin: 0;
+}
+#gene-control .switch-row + .switch-row {
+  margin-top: 8px;
+}
+input[type="checkbox"] { margin: 0; }
+
+/* Make the checkbox rows the same width as the Gene ID area above */
+#kw-control .switch-row {
+  grid-column: 1 / span 4;
+  width: 100%;
+}
+
+/* Keyword search spans up to the Generate Plot area (not under similarity panel) */
+#kw-control .kw-search {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+
+    .status {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #555;
+    }
+
+    .status.error {
+      color: #c0392b;
+      font-weight: 600;
+    }
+
+    #plot {
+      width: 100%;
+      height: auto;
+      min-height: 820px;
+    }
+
+    /* --- Multi-gene plot layout --- */
+    .gene-plot-wrap{
+      width: 100%;
+      margin: 14px 0 26px;
+      padding: 10px 10px 6px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .gene-plot-head{
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      flex-wrap: wrap;
+      margin: 2px 0 8px;
+    }
+    .gene-plot-head .gene-label{
+      font-weight: 700;
+    }
+    .gene-plot-head .gene-anno{
+      font-weight: 500;
+      font-size: 12px;
+      color: #444;
+    }
+    .gene-plot-box{
+      width: 100%;
+      height: 1100px;
+    }
+
+    /* Matched gene list (annotation search) */
+    #anno-hit-list{
+      width: 100%;
+      max-height: 150px;
+      overflow: auto;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      background: #fff;
+      padding: 6px 8px;
+      box-sizing: border-box;
+    }
+    #anno-hit-list a{
+      text-decoration: underline;
+      cursor: pointer;
+      display: inline-block;
+      margin: 2px 10px 2px 0;
+    }
+
+    /* Data table gene selector */
+    .table-gene-row{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 6px 0 0;
+      font-size: 12px;
+    }
+    #table-gene-select{
+      width: auto;
+      min-width: 240px;
+    }
+
+
+    #similar-gene-select{
+      width: auto;
+      min-width: 240px;
+    }
+
+
+    .plot-title {
+      text-align: center;
+      width: 100%;
+      word-break: break-word;
+      margin: 18px 0 12px;
+      font-weight: 700;      
+    }
+
+    .plot-title a {
+      font-weight: inherit;
+    }
+
+    .info-panel, .data-panel {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #fafafa;
+      font-size: 12px;
+      border: 1px solid #eee;
+    }
+
+    
+    /* Similarity panel (under the data table) */
+    .similar-panel {
+      margin: 0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #fafafa;
+      font-size: 12px;
+      border: 1px solid #eee;
+    }
+    #similar-content {
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    #similar-content a {
+      text-decoration: underline;
+    }
+
+.info-panel {
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .info-panel h3, .data-panel h3 {
+      margin: 0 0 4px;
+      font-size: 13px;
+    }
+
+    .info-panel table, .data-panel table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+
+    .info-panel th,
+    .info-panel td,
+    .data-panel th,
+    .data-panel td {
+      border: 1px solid #ddd;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    .info-panel th, .data-panel th {
+      background: #f0f0f0;
+    }
+
+    /* Data table */
+    .table-wrap {
+      margin-top: 6px;
+      max-height: 320px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    #data-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    #data-table tbody tr:hover {
+      background: #f7fbff;
+      cursor: pointer;
+    }
+
+    #data-table tbody tr.selected {
+      outline: 2px solid #3498db;
+      outline-offset: -2px;
+      background: #eef6ff;
+    }
+
+    
+    /* ---- Data table header: no wrapping, no horizontal scroll ---- */
+    #data-table {
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    /* Prevent header wrapping (including attributes) */
+    #data-table thead th {
+      white-space: nowrap;
+      word-break: normal;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Column width hints: keep small columns compact, give attributes more room */
+    #data-table thead th.col-small {
+      width: 86px; /* enough for short headers like PRJNA/SRR */
+    }
+    /* attributes column takes the remaining width */
+    #data-table thead th.col-attr {
+      width: auto;
+    }
+
+    /* Body cells can wrap (especially attributes) */
+    #data-table tbody td.col-attr-cell {
+      white-space: normal;
+      word-break: break-word;
+    }
+.small-note {
+      margin: 2px 0 0;
+      color: #666;
+      font-size: 11px;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 16px;
+    }
+@media (max-width: 720px) {
+  .controls {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  #ref-control, #gene-control, #group-control, #similar-control, #kw-control {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    margin-top: 0;
+  }
+
+  .inline-row {
+    flex-wrap: wrap;
+  }
+
+  #group-control .inline-row select {
+    width: 100%;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  #plot-btn {
+    width: 100%;
+  }
+}
+
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+  <h1>Template RNA-seq database</h1>
+  <p>Search and visualize gene expression across samples</p>
+  </div>
+  <nav class="top-nav" aria-label="Primary">
+    <a href="../index.html">Home</a>
+    <a href="../Help/index.html">Help</a>
+    <a href="../Download/index.html">Download</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="controls">
+    <div id="ref-control">
+      <label for="ref-genome">Reference genome cultivar</label>
+      <select id="ref-genome">
+        <option value="ref">Template</option>
+      </select>
+    </div>
+
+    <div id="gene-control">
+      <label for="gene-input">Gene ID or annotation</label>
+      <input id="gene-input" type="text" list="gene-list" placeholder="Type Gene ID OR annotation keywords" />
+      <datalist id="gene-list"></datalist>
+
+      <div class="switch-row">
+        <input type="checkbox" id="regex-enable" />
+        <label for="regex-enable">Use regex (Gene ID search)</label>
+      </div>
+
+      <div class="small-note">
+        You can input multiple Gene IDs separated by spaces/commas.
+        You can also search by gene annotation (Arabidopsis / rice). Matched genes will be plotted all at once (up to 500).
+        Regex is supported via this checkbox or <code>/.../flags</code> form.
+      </div>
+      <div class="anno-hit-box" id="anno-hit-box" style="display:none;">
+        <label>Matched genes</label>
+        <div id="anno-hit-list"></div>
+        <div class="status" id="anno-status"></div>
+      </div>
+      <div class="status" id="status-text">Now loading...</div>
+      <div class="switch-row">
+        <input type="checkbox" id="log-transform" />
+        <label for="log-transform">Convert to log10(TPM + 1)</label>
+      </div>
+
+      <div class="switch-row">
+        <input type="checkbox" id="kw-enable" />
+        <label for="kw-enable">Enable keyword filter for samples</label>
+      </div>
+
+    </div>
+
+    <div id="group-control">
+      <label for="group-by">Group by</label>
+      <div class="inline-row">
+        <select id="group-by">
+          <option value="tissue">tissue</option>
+          <option value="treatment">treatment</option>
+          <option value="stage">stage</option>
+          <option value="line">cultivar</option>
+          <option value="none">Show all samples (not grouping)</option>
+        </select>
+        <button id="plot-btn" disabled>Generate plot</button>
+      </div>
+    </div>
+
+    <div id="kw-control">
+<div class="kw-search">
+    <label class="kw-label">Search key words</label>
+    <input id="kw-input" type="text" placeholder='e.g., leaf root heat' disabled />
+    <div class="small-note">When enabled, samples are filtered by keywords found in the sample metadata. Multiple keywords are separated by spaces (AND search).</div>
+    <div class="status" id="kw-status"></div>
+  </div>
+</div>
+
+  </div>
+
+  <div id="plot-title" class="plot-title"></div>
+
+  <div id="plot"></div>
+
+  <!-- Data used for the plot -->
+  <div class="data-panel" id="data-panel">
+    <h3>Data used for the plot</h3>
+    <div class="table-gene-row" id="table-gene-row" style="display:none;">
+      <label for="table-gene-select">Gene for table</label>
+      <select id="table-gene-select"></select>
+    </div>
+    <div class="status" id="data-desc">No plot yet.</div>
+    <div class="table-wrap">
+      <table id="data-table">
+        <thead id="data-thead"></thead>
+        <tbody id="data-tbody"></tbody>
+      </table>
+    </div></div>
+</div>
+
+<footer>
+This database was constructed in the Tsugama Laboratory (<a href="https://park.itc.u-tokyo.ac.jp/lgpr/index.html">https://park.itc.u-tokyo.ac.jp/lgpr/index.html</a>).
+</footer>
+
+<script>
+  // ---- Sharded binary column store (Method A) ----
+  // Required files (static hosting is enough):
+  //  - meta.tsv                : first 10 columns (sample metadata), tab-separated with header
+  //  - gene_index.tsv          : gene\tshard_id\tcol_in_shard   (tab-separated, no header required)
+  //  - manifest.json           : {"shard_genes":1024, "n_samples":1234, "shard_gene_counts":[...]}
+  //  - shards/shard_000.bin    : Float32 little-endian, row-major: [sample0(g0..gK-1), sample1(...), ...]
+  //
+  // This HTML no longer downloads/loads the 600MB CSV.
+
+  let META_COLS = [];        // meta.tsv header (all cols in meta)
+  let GROUPABLE_COLS = [];   // meta columns that can be used as "Group by" (exclude SRR/SAMN/code)
+  let metaRows = [];         // Array of objects: one per sample row (metadata only)
+
+  let geneNames = [];        // gene list
+  let geneToIndex = new Map(); // gene -> {shardId, col}
+
+  let MANIFEST = null;       // manifest.json content
+  let plotDiv = null;
+  let selectedTableRow = null;
+
+  // Cache loaded shard binaries: shardId -> {geneCount, data: Float32Array}
+  const shardCache = new Map();
+
+  const PATH_META = "meta.tsv";
+  const PATH_GENE_INDEX = "gene_index.tsv";
+  const PATH_MANIFEST = "manifest.json";
+  const PATH_GENE_ANNOT = "Template.txt"; // gene	Arabidopsis_annotation	Rice_annotation
+
+  const SHARD_DIR = "shards"; // directory that contains shard_XXX.bin
+
+  // ---- Reference genome selector + similarity mappings ----
+  const PATH_SIM_TIFT_843B = "";
+  const PATH_SIM_TIFT_06777R = "";
+
+  let SIMMAP_843B = null;     // Map<tiftGene, Set<geneId>>
+  let SIMMAP_06777R = null;   // Map<tiftGene, Set<geneId>>
+
+  function getSiteRootPath() {
+    const p = window.location.pathname || "/";
+    const markers = ["/SB/"];
+    for (const m of markers) {
+      const i = p.indexOf(m);
+      if (i !== -1) return p.slice(0, i + 1); // keep trailing "/"
+    }
+    // fallback: current directory
+    return p.slice(0, p.lastIndexOf("/") + 1);
+  }
+
+  function detectCurrentGenome() {
+    return "ref";
+  }
+
+  function getGenomePagePath(genome) {
+    // SB has a single reference genome page.
+    return window.location.pathname || "";
+  }
+
+  function setupReferenceGenomeSelector() {
+    const sel = document.getElementById("ref-genome");
+    if (!sel) return;
+
+    // reflect current page
+    sel.value = detectCurrentGenome();
+
+    sel.addEventListener("change", () => {
+      const genome = sel.value;
+      window.location.href = getGenomePagePath(genome);
+    });
+  }
+
+  async function fetchTextAny(paths) {
+    let lastErr = null;
+    for (const p of paths) {
+      try {
+        return await fetchText(p);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Failed to fetch similarity file");
+  }
+
+  function parsePairMap(text) {
+    const map = new Map();
+    const lines = text.split(/\r?\n/);
+    for (const line0 of lines) {
+      const line = line0.trim();
+      if (!line) continue;
+      if (!line.includes("\t")) continue; // skip headers like "1"
+      const parts = line.split("\t");
+      if (parts.length < 2) continue;
+      const k = parts[0].trim();
+      const v = parts[1].trim();
+      if (!k || !v) continue;
+
+      if (!map.has(k)) map.set(k, new Set());
+      map.get(k).add(v);
+    }
+    return map;
+  }
+
+  async function loadSimilarityMap(which) {
+    if (which === "843B" && SIMMAP_843B) return SIMMAP_843B;
+    if (which === "06777R" && SIMMAP_06777R) return SIMMAP_06777R;
+
+    const root = getSiteRootPath();
+    const path = (which === "843B") ? PATH_SIM_TIFT_843B : PATH_SIM_TIFT_06777R;
+
+    // Try "same directory" first, then site root
+    const txt = await fetchTextAny([path, root + path]);
+
+    const m = parsePairMap(txt);
+    if (which === "843B") SIMMAP_843B = m;
+    else SIMMAP_06777R = m;
+    return m;
+  }
+
+  function renderGeneLinks(genes, genome) {
+    const frag = document.createDocumentFragment();
+    if (!genes || !genes.length) {
+      frag.appendChild(document.createTextNode("None"));
+      return frag;
+    }
+
+    genes.forEach((g, i) => {
+      if (i) frag.appendChild(document.createTextNode(", "));
+      const a = document.createElement("a");
+      a.href = getGenomePagePath(genome) + "?gene=" + encodeURIComponent(g);
+      a.textContent = g;
+      frag.appendChild(a);
+    });
+    return frag;
+  }
+
+  async function updateSimilarityPanel(_) {
+  // Nothing to do
+  }
+
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    plotDiv = document.getElementById("plot");
+    const statusText = document.getElementById("status-text");
+    const plotBtn = document.getElementById("plot-btn");
+
+    setupReferenceGenomeSelector();
+
+    const kwEnable = document.getElementById("kw-enable");
+    const kwInput = document.getElementById("kw-input");
+
+    // keyword checkbox behavior
+    kwEnable.addEventListener("change", () => {
+      kwInput.disabled = !kwEnable.checked;
+      if (!kwEnable.checked) document.getElementById("kw-status").textContent = "";
+      if (!plotBtn.disabled) drawPlot(); // redraw reflecting filter ON/OFF
+    });
+
+    // Enter to redraw
+    kwInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") drawPlot();
+    });
+
+    // button click
+    plotBtn.addEventListener("click", drawPlot);
+
+
+    // table gene selector (for multi-gene plots)
+    const tableGeneSelect = document.getElementById("table-gene-select");
+    tableGeneSelect?.addEventListener("change", () => {
+      const gene = tableGeneSelect.value;
+      try { updateTableForGene(gene); } catch (e) { console.error(e); }
+    });
+
+    
+
+   
+
+
+    statusText.textContent = "Now loading (meta + index)...";
+
+    try {
+      // 1) manifest
+      MANIFEST = await fetchJSON(PATH_MANIFEST);
+
+      // 2) meta.tsv
+      const metaText = await fetchText(PATH_META);
+      parseMetaTSV(metaText);
+
+      // 3) gene index
+      const idxText = await fetchText(PATH_GENE_INDEX);
+      parseGeneIndexTSV(idxText);
+
+      // 4) gene annotation (optional)
+      // Put "Pg_annot.txt" next to this HTML (same dir as meta.tsv, gene_index.tsv, manifest.json)
+      // Format: gene<TAB>Arabidopsis_annotation<TAB>Rice_annotation
+      try {
+        const annoText = await fetchText(PATH_GENE_ANNOT);
+        parseGeneAnnoTable(annoText);
+      } catch (e) {
+        // It's OK if the file does not exist; gene-ID search still works.
+        console.warn("Gene annotation file is not available:", e);
+        hideAnnoChooser();
+      }
+
+
+      // Rebuild group-by options (1..9 cols equivalent, but we follow original rule: exclude SRR/SAMN/code)
+      refreshGroupByOptions();
+
+      // Fill gene datalist
+      const dl = document.getElementById("gene-list");
+      dl.innerHTML = "";
+      geneNames.forEach(g => {
+        const opt = document.createElement("option");
+        opt.value = g;
+        dl.appendChild(opt);
+      });
+
+      statusText.textContent = `Ready. Genes: ${geneNames.length}, Samples: ${metaRows.length}`;
+      statusText.classList.remove("error");
+      plotBtn.disabled = false;
+
+      // initial gene (URL param "gene" has priority)
+      const urlGene = new URLSearchParams(window.location.search).get("gene");
+      if (urlGene) {
+        document.getElementById("gene-input").value = urlGene;
+        drawPlot();
+      } 
+    } catch (e) {
+      console.error(e);
+      statusText.textContent = "Error while loading: " + (e && e.message ? e.message : String(e));
+      statusText.classList.add("error");
+      plotBtn.disabled = true;
+    }
+  });
+
+  async function fetchText(path) {
+    const r = await fetch(path, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`Failed to fetch ${path}: HTTP ${r.status}`);
+    return await r.text();
+  }
+
+  async function fetchJSON(path) {
+    const r = await fetch(path, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`Failed to fetch ${path}: HTTP ${r.status}`);
+    return await r.json();
+  }
+
+  function parseMetaTSV(tsv) {
+    const lines = tsv.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.length);
+    if (lines.length < 2) throw new Error("meta.tsv is empty");
+    const header = lines[0].split("\t");
+    META_COLS = header;
+
+    // Group-by columns: original logic uses first 9 columns excluding SRR/SAMN/code.
+    // Here we assume meta.tsv has exactly the "first 10 columns" from the original CSV, in the same order.
+    const first9 = header.slice(0, Math.min(9, header.length));
+    const EXCLUDE_GROUPBY = new Set(["sra", "biosample", "code"]);
+    GROUPABLE_COLS = first9.filter(c => !EXCLUDE_GROUPBY.has(String(c).toLowerCase()));
+
+    metaRows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split("\t");
+      const obj = {};
+      for (let j = 0; j < header.length; j++) obj[header[j]] = parts[j] ?? "";
+      metaRows.push(obj);
+    }
+
+    if (MANIFEST && typeof MANIFEST.n_samples === "number" && MANIFEST.n_samples !== metaRows.length) {
+      throw new Error(`n_samples mismatch: manifest.json says ${MANIFEST.n_samples}, meta.tsv has ${metaRows.length}`);
+    }
+  }
+
+  function parseGeneIndexTSV(tsv) {
+    const lines = tsv.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim().length);
+    geneNames = [];
+    geneToIndex = new Map();
+
+    for (const line of lines) {
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      const gene = parts[0].trim();
+      const shardId = parseInt(parts[1], 10);
+      const col = parseInt(parts[2], 10);
+      if (!gene || isNaN(shardId) || isNaN(col)) continue;
+      geneNames.push(gene);
+      geneToIndex.set(gene, { shardId, col });
+    }
+
+    if (!geneNames.length) throw new Error("gene_index.tsv has no valid rows");
+  }
+
+  
+  function detectDelimiter(line) {
+    if (line.includes("\t")) return "\t";
+    if (line.includes(",")) return ",";
+    return "\t";
+  }
+
+  function parseGeneAnnoTable(text) {
+    // Accept TSV/CSV. Expected columns:
+    // 1) geneId, 2) Arabidopsis-based annotation, 3) Rice-based annotation
+    const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim().length);
+    if (!lines.length) return;
+
+    const delim = detectDelimiter(lines[0]);
+    let start = 0;
+
+    // If header-like, skip it
+    const head = lines[0].toLowerCase();
+    if (head.includes("gene") && (head.includes("arabid") || head.includes("ath") || head.includes("rice") || head.includes("oryza"))) {
+      start = 1;
+    }
+
+    GENE_ANNO = new Map();
+    ANNO_INDEX = [];
+
+    for (let i = start; i < lines.length; i++) {
+      const parts = lines[i].split(delim);
+      if (parts.length < 2) continue;
+      const gene = (parts[0] || "").trim();
+      const ath = (parts[1] || "").trim();
+      const rice = (parts[2] || "").trim();
+      if (!gene) continue;
+
+      const obj = { ath, rice };
+      GENE_ANNO.set(gene, obj);
+
+      const haystack = (gene + " " + ath + " " + rice).toLowerCase();
+      ANNO_INDEX.push({ gene, ath, rice, haystack });
+    }
+  }
+
+  function truncateForOption(s, maxLen) {
+    const t = String(s || "").replace(/\s+/g, " ").trim();
+    if (t.length <= maxLen) return t;
+    return t.slice(0, maxLen - 1) + "…";
+  }
+
+  function findGenesByAnnotation(query, limit) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return [];
+    const terms = q.split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+
+    const hits = [];
+    for (const row of ANNO_INDEX) {
+      const h = row.haystack;
+      if (terms.every(t => h.includes(t))) {
+        hits.push(row);
+        if (limit && hits.length >= limit) break;
+      }
+    }
+    return hits;
+  }
+
+  
+  function plotIdForGene(gene) {
+    return "plot-" + String(gene).replace(/[^A-Za-z0-9_-]/g, "_");
+  }
+  function plotWrapIdForGene(gene) {
+    return "wrap-" + String(gene).replace(/[^A-Za-z0-9_-]/g, "_");
+  }
+
+  function hideAnnoChooser() {
+    const box = document.getElementById("anno-hit-box");
+    const list = document.getElementById("anno-hit-list");
+    const st = document.getElementById("anno-status");
+    if (box) box.style.display = "none";
+    if (list) list.innerHTML = "";
+    if (st) st.textContent = "";
+  }
+
+  function showAnnoChooser(genes, query, totalHits, plottedHits, capped) {
+    const box = document.getElementById("anno-hit-box");
+    const list = document.getElementById("anno-hit-list");
+    const st = document.getElementById("anno-status");
+    if (!box || !list || !st) return;
+
+    box.style.display = "block";
+    list.innerHTML = "";
+
+    const geneList = (genes || []).map((x) => typeof x === "string" ? x : (x && x.gene ? x.gene : null)).filter(Boolean);
+
+    geneList.forEach((g) => {
+      const a = document.createElement("a");
+      a.textContent = g;
+      a.href = "javascript:void(0)";
+      a.addEventListener("click", () => {
+        const target = document.getElementById(plotWrapIdForGene(g)) || document.getElementById(plotIdForGene(g));
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      list.appendChild(a);
+    });
+
+    const t = (typeof totalHits === "number") ? totalHits : geneList.length;
+    const p = (typeof plottedHits === "number") ? plottedHits : geneList.length;
+    st.textContent = `Matched ${t} gene(s) for "${query}". Plotting ${p}${capped ? " (showing first 500)" : ""}.`;
+  }
+
+
+function refreshGroupByOptions() {
+    const groupSelect = document.getElementById("group-by");
+    const prev = groupSelect.value;
+
+    groupSelect.innerHTML = "";
+
+    GROUPABLE_COLS.forEach(col => {
+      const opt = document.createElement("option");
+      opt.value = col;
+      opt.textContent = col;
+      groupSelect.appendChild(opt);
+    });
+
+    const optNone = document.createElement("option");
+    optNone.value = "none";
+    optNone.textContent = "Show all samples (not grouping)";
+    groupSelect.appendChild(optNone);
+
+    if (GROUPABLE_COLS.includes(prev)) groupSelect.value = prev;
+    else if (GROUPABLE_COLS.includes("tissue")) groupSelect.value = "tissue";
+    else if (GROUPABLE_COLS.length > 0) groupSelect.value = GROUPABLE_COLS[0];
+    else groupSelect.value = "none";
+  }
+
+  function normalizeKeywords(str) {
+    if (!str) return [];
+    return str.trim().split(/\s+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  }
+
+  function rowMatchesKeywords(row, keywords) {
+    if (!keywords.length) return true;
+    const haystack = META_COLS.map(c => String(row[c] ?? "")).join(" ").toLowerCase();
+    return keywords.every(k => haystack.includes(k));
+  }
+
+  function shardFileName(shardId) {
+    const s = String(shardId).padStart(3, "0");
+    return `${SHARD_DIR}/shard_${s}.bin`;
+  }
+
+  async function loadShard(shardId) {
+    if (shardCache.has(shardId)) return shardCache.get(shardId);
+
+    if (!MANIFEST || !Array.isArray(MANIFEST.shard_gene_counts)) {
+      throw new Error("manifest.json is missing shard_gene_counts");
+    }
+    const geneCount = MANIFEST.shard_gene_counts[shardId];
+    if (typeof geneCount !== "number") throw new Error(`manifest.json has no gene count for shard ${shardId}`);
+
+    const path = shardFileName(shardId);
+    const r = await fetch(path, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`Failed to fetch ${path}: HTTP ${r.status}`);
+
+    const ab = await r.arrayBuffer();
+    const f32 = new Float32Array(ab);
+
+    const expected = metaRows.length * geneCount;
+    if (f32.length !== expected) {
+      throw new Error(`Shard size mismatch for ${path}: got ${f32.length} floats, expected ${expected} (= ${metaRows.length} samples x ${geneCount} genes)`);
+    }
+
+    const obj = { geneCount, data: f32 };
+    shardCache.set(shardId, obj);
+    return obj;
+  }
+
+  function extractGeneVector(shardObj, col) {
+    const n = metaRows.length;
+    const g = shardObj.geneCount;
+    const data = shardObj.data;
+    const vec = new Float32Array(n);
+
+    // row-major: data[row*g + col]
+    for (let i = 0; i < n; i++) vec[i] = data[i * g + col];
+    return vec;
+  }
+  // ---- Group ordering helpers ----
+  function isNAKey(k) {
+    return String(k).trim().toLowerCase() === "na";
+  }
+
+  function isNumericKey(k) {
+    const s = String(k).trim();
+    if (s === "") return false;
+    return Number.isFinite(Number(s));
+  }
+
+  // Normalize numeric label: "25.0" -> "25", "28.00" -> "28", "25.50" -> "25.5"
+  function normalizeNumericLabel(v) {
+    const s = String(v).trim();
+    if (!isNumericKey(s)) return s;
+    const n = Number(s);
+    if (Number.isInteger(n)) return String(n);
+    return String(n);
+  }
+
+  // Order groups: numeric ascending (if all non-NA are numeric) + NA last.
+  // Otherwise keep original order but move NA to the end.
+  function orderGroupsSmart(keys) {
+    const na = keys.filter(isNAKey);
+    const nonNA = keys.filter(k => !isNAKey(k));
+
+    const allNumeric = nonNA.length > 0 && nonNA.every(isNumericKey);
+
+    if (allNumeric) {
+      const sorted = [...nonNA].sort((a, b) => {
+        const da = Number(String(a).trim());
+        const db = Number(String(b).trim());
+        if (da !== db) return da - db;
+        const sa = String(a), sb = String(b);
+        return sa.length - sb.length || sa.localeCompare(sb);
+      });
+      return sorted.concat(na);
+    }
+
+    return nonNA.concat(na);
+  }
+
+
+  
+    // ---- Treatment group ordering (special rule for "treatment") ----
+  // Salt/Drought: 1,3,5,7,24,48,96,144
+  // Heat:         1,3,7,48,96
+  const TIME_ORDER = [1,3,5,7,24,48,96,144];
+  const HEAT_TIME_ORDER = [1,3,7,48,96];
+
+  function orderTreatmentGroups(keys) {
+    const na = keys.filter(isNAKey);
+    const nonNA = keys.filter(k => !isNAKey(k));
+
+    // Buckets: preserve original order within each (series, time) slot
+    const buckets = {
+      heat: new Map(),
+      salt: new Map(),
+      drought: new Map()
+    };
+
+    HEAT_TIME_ORDER.forEach(h => buckets.heat.set(h, []));
+    TIME_ORDER.forEach(h => {
+      buckets.salt.set(h, []);
+      buckets.drought.set(h, []);
+    });
+
+    const other = [];
+
+    // Accept: "1h", "1 h", "1hour", "1 hour", "1 hours", "1hr", etc.
+    const unit = "(?:h|hr|hrs|hour|hours)";
+    const reHeat = new RegExp("^heat\\s*(\\d+)\\s*" + unit + "\\s*$", "i");
+    const reSalt = new RegExp("^salt\\s*treatment\\s*for\\s*(\\d+)\\s*" + unit + "\\s*$", "i");
+    const reDrought = new RegExp("^drought\\s*treatment\\s*for\\s*(\\d+)\\s*" + unit + "\\s*$", "i");
+
+    let anySpecial = false;
+
+    for (const k of nonNA) {
+      const s = String(k).trim();
+      let m;
+
+      // heat
+      if ((m = s.match(reHeat))) {
+        const h = parseInt(m[1], 10);
+        if (HEAT_TIME_ORDER.includes(h)) {
+          buckets.heat.get(h).push(k);
+          anySpecial = true;
+          continue;
+        }
+      }
+
+      // salt
+      if ((m = s.match(reSalt))) {
+        const h = parseInt(m[1], 10);
+        if (TIME_ORDER.includes(h)) {
+          buckets.salt.get(h).push(k);
+          anySpecial = true;
+          continue;
+        }
+      }
+
+      // drought
+      if ((m = s.match(reDrought))) {
+        const h = parseInt(m[1], 10);
+        if (TIME_ORDER.includes(h)) {
+          buckets.drought.get(h).push(k);
+          anySpecial = true;
+          continue;
+        }
+      }
+
+      // anything else keeps original relative order
+      other.push(k);
+    }
+
+    // If nothing matches our treatment patterns, keep stable order + NA last.
+    if (!anySpecial) return nonNA.concat(na);
+
+    // Output: heat -> salt -> drought, then other, then NA at the very end.
+    const out = [];
+    for (const h of HEAT_TIME_ORDER) out.push(...buckets.heat.get(h));
+    for (const h of TIME_ORDER) out.push(...buckets.salt.get(h));
+    for (const h of TIME_ORDER) out.push(...buckets.drought.get(h));
+
+    return out.concat(other).concat(na);
+  }
+
+  // ---- Main draw ----
+  const MAX_PLOT_GENES = 500;
+
+  const CURRENT = {
+    genes: [],
+    geneVecs: new Map(),    // gene -> Float32Array
+    filteredIdx: [],
+    groupBy: "none",
+    logTransform: false,
+    kwEnable: false,
+    keywords: []
+  };
+
+  function splitTokens(input) {
+    return String(input || "")
+      .split(/[\s,;]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  function parseSlashRegex(token) {
+    // token like: /pattern/flags
+    if (!token || token[0] !== "/") return null;
+    const last = token.lastIndexOf("/");
+    if (last <= 0) return null;
+    const pattern = token.slice(1, last);
+    const flags = token.slice(last + 1);
+    return new RegExp(pattern, flags);
+  }
+
+  function uniquePreserveOrder(arr) {
+    const out = [];
+    const seen = new Set();
+    for (const x of arr) {
+      if (seen.has(x)) continue;
+      seen.add(x);
+      out.push(x);
+    }
+    return out;
+  }
+
+  function capGenesStable(genes) {
+    const uniq = uniquePreserveOrder(genes);
+    const sorted = [...uniq].sort(); // fixed rule for reproducibility
+    const total = sorted.length;
+    const capped = total > MAX_PLOT_GENES;
+    return { total, capped, genes: capped ? sorted.slice(0, MAX_PLOT_GENES) : sorted };
+  }
+
+  function formatListForStatus(arr, maxShow = 25) {
+    const a = arr || [];
+    if (!a.length) return "";
+    const shown = a.slice(0, maxShow);
+    const more = a.length > maxShow ? ` ...(+${a.length - maxShow})` : "";
+    return shown.join(", ") + more;
+  }
+
+  function resolveGenesByRegex(regexList) {
+    // match against geneNames
+    const out = [];
+    const seen = new Set();
+    for (const g of geneNames) {
+      for (const re of regexList) {
+        if (re.test(g)) {
+          if (!seen.has(g)) {
+            seen.add(g);
+            out.push(g);
+          }
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  function buildTracesForGene(gene, geneVec, filteredIdx, groupBy, logTransform) {
+    const groups = {};
+    const useGroup = groupBy !== "none";
+
+    filteredIdx.forEach((idx) => {
+      const row = metaRows[idx];
+      const raw = geneVec[idx];
+      if (raw == null || isNaN(raw)) return;
+
+      const value = logTransform ? Math.log10(raw + 1) : raw;
+      let gval = useGroup ? (row[groupBy] ?? "NA") : "All samples";
+      if (useGroup && String(gval).trim() === "") gval = "NA";
+
+      // Normalize numeric group labels (e.g., 25 and 25.0 -> 25) while keeping NA as NA
+      if (useGroup && !isNAKey(gval) && isNumericKey(gval)) {
+        gval = normalizeNumericLabel(gval);
+      }
+
+      if (!groups[gval]) groups[gval] = { y: [], customdata: [], hovertext: [] };
+      groups[gval].y.push(value);
+      groups[gval].customdata.push(idx);
+      groups[gval].hovertext.push(makeHoverText(row, gene, raw, idx));
+    });
+
+    const groupKeys = Object.keys(groups);
+    const orderedGroups = (useGroup && String(groupBy).toLowerCase() === "treatment")
+      ? orderTreatmentGroups(groupKeys)
+      : orderGroupsSmart(groupKeys);
+
+    const traces = [];
+    for (const g of orderedGroups) {
+      const obj = groups[g];
+      traces.push({
+        type: "violin",
+        name: String(g),
+        y: obj.y,
+        customdata: obj.customdata,
+        text: obj.hovertext,
+        hovertemplate: "%{text}<extra></extra>",
+        box: { visible: true },
+        meanline: { visible: true },
+        points: "all",
+        jitter: 0.25,
+        scalemode: "width"
+      });
+    }
+
+    const yTitle = logTransform ? "log10(TPM + 1)" : "TPM";
+    const layout = {
+      title: { text: "" },
+      yaxis: { title: yTitle, zeroline: false, automargin: true },
+      xaxis: {
+        title: groupBy === "none" ? "" : groupBy,
+        automargin: true,
+        ...(useGroup ? {
+          type: "category",
+          categoryorder: "array",
+          categoryarray: orderedGroups.map(String)
+        } : {})
+      },
+      margin: { l: 60, r: 20, t: 40, b: 120 },
+      legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.15, yanchor: "bottom" }
+    };
+
+    return { traces, layout };
+  }
+
+  function setPlotTitle(genes, groupBy) {
+    const titleEl = document.getElementById("plot-title");
+    if (!titleEl) return;
+    titleEl.innerHTML = "";
+
+    const n = genes.length;
+    if (n === 1) {
+      const gene = genes[0];
+      titleEl.appendChild(document.createTextNode("Gene: "));
+      const s = document.createElement("span");
+      s.textContent = gene;
+      titleEl.appendChild(s);
+
+      // Show annotation (if available)
+      if (GENE_ANNO && GENE_ANNO.has(gene)) {
+        const info = GENE_ANNO.get(gene);
+        const span = document.createElement("span");
+        span.style.fontWeight = "500";
+        span.style.fontSize = "12px";
+        span.style.display = "block";
+        span.style.marginTop = "6px";
+        const ath = info && info.ath ? info.ath : "NA";
+        const rice = info && info.rice ? info.rice : "NA";
+        span.textContent = `Arabidopsis annotation: ${ath} | Rice annotation: ${rice}`;
+        titleEl.appendChild(span);
+      }
+
+    } else {
+      titleEl.appendChild(document.createTextNode(`Genes (${n}): `));
+      const frag = document.createDocumentFragment();
+      genes.forEach((gene, i) => {
+        const s = document.createElement("span");
+        s.textContent = gene;
+        frag.appendChild(s);
+        if (i !== genes.length - 1) frag.appendChild(document.createTextNode(", "));
+      });
+      titleEl.appendChild(frag);
+    }
+
+    const groupSpan = document.createElement("span");
+    groupSpan.style.display = "block";
+    groupSpan.style.marginTop = "10px";
+    groupSpan.textContent = `Group by "${groupBy === "none" ? "NA" : groupBy}"`;
+    titleEl.appendChild(groupSpan);
+  }
+
+  function setupTableGeneSelector(genes) {
+    const row = document.getElementById("table-gene-row");
+    const sel = document.getElementById("table-gene-select");
+    if (!row || !sel) return;
+
+    sel.innerHTML = "";
+    if (!genes || genes.length <= 1) {
+      row.style.display = "none";
+      return;
+    }
+    row.style.display = "flex";
+    genes.forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.textContent = g;
+      sel.appendChild(opt);
+    });
+  }
+
+  
+  function setupSimilarityGeneSelector(genes) {
+    const row = document.getElementById("similar-gene-row");
+    const sel = document.getElementById("similar-gene-select");
+    if (!row || !sel) return;
+
+    // Always reset (avoid stale options)
+    sel.innerHTML = "";
+
+    const genome = detectCurrentGenome();
+
+    // Similarity panel is available only when Reference genome is "Tift" (keep existing rule)
+    if (genome !== "tift") {
+      row.style.display = "none";
+      sel.disabled = true;
+      return;
+    }
+
+    sel.disabled = false;
+
+    // Show only when multiple genes are plotted
+    if (!genes || genes.length <= 1) {
+      row.style.display = "none";
+      return;
+    }
+
+    row.style.display = "flex";
+
+    genes.forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.textContent = g;
+      sel.appendChild(opt);
+    });
+  }
+
+function updateTableForGene(gene) {
+    if (!gene) return;
+    const geneVec = CURRENT.geneVecs.get(gene);
+    if (!geneVec) return;
+    updateDataTable(CURRENT.filteredIdx, gene, geneVec, CURRENT.logTransform, CURRENT.kwEnable, CURRENT.keywords, CURRENT.groupBy);
+  }
+
+  async function drawPlot() {
+    let geneQuery = document.getElementById("gene-input").value.trim();
+    const groupBy = document.getElementById("group-by").value;
+    const logTransform = document.getElementById("log-transform").checked;
+    const statusText = document.getElementById("status-text");
+
+    const kwEnable = document.getElementById("kw-enable").checked;
+    const kwInput = document.getElementById("kw-input").value;
+    const kwStatus = document.getElementById("kw-status");
+
+    const useRegex = document.getElementById("regex-enable")?.checked;
+
+    if (!geneQuery) {
+      statusText.textContent = "Type the Gene ID or annotation keywords.";
+      statusText.classList.add("error");
+      hideAnnoChooser();
+      return;
+    }
+
+    statusText.classList.remove("error");
+    hideAnnoChooser();
+
+    // keyword filter (compute once; shared across all genes)
+    const keywords = kwEnable ? normalizeKeywords(kwInput) : [];
+    const filteredIdx = [];
+    metaRows.forEach((row, idx) => {
+      if (!kwEnable) { filteredIdx.push(idx); return; }
+      if (rowMatchesKeywords(row, keywords)) filteredIdx.push(idx);
+    });
+
+    if (kwEnable) {
+      const kwLabel = keywords.length ? keywords.join(" ") : "(empty)";
+      kwStatus.textContent = `Keyword filter ON: "${kwLabel}" → matched ${filteredIdx.length}/${metaRows.length} samples`;
+    } else {
+      kwStatus.textContent = "";
+    }
+
+    // --- Resolve to gene list ---
+    let genesToPlot = [];
+    let totalResolved = 0;
+    let capApplied = false;
+    let missing = [];
+    let src = "gene"; // gene | regex | annotation
+
+    try {
+      const tokens = splitTokens(geneQuery);
+
+      // regex route: either "Use regex" is ON, or /.../flags tokens exist
+      const slashRegexTokens = tokens.filter(t => t.startsWith("/") && t.lastIndexOf("/") > 0);
+      if ((useRegex && tokens.length > 0) || slashRegexTokens.length > 0) {
+        const regexList = [];
+
+        // explicit /.../flags
+        for (const t of slashRegexTokens) regexList.push(parseSlashRegex(t));
+
+        // plain patterns when checkbox ON (exclude slash tokens)
+        if (useRegex) {
+          const plain = tokens.filter(t => !(t.startsWith("/") && t.lastIndexOf("/") > 0));
+          if (!plain.length && !slashRegexTokens.length) {
+            throw new Error("Regex is enabled, but the pattern is empty.");
+          }
+          for (const t of plain) regexList.push(new RegExp(t));
+        }
+
+        // match
+        const matched = resolveGenesByRegex(regexList);
+        src = "regex";
+
+        const capped = capGenesStable(matched);
+        totalResolved = capped.total;
+        capApplied = capped.capped;
+        genesToPlot = capped.genes;
+
+        if (!genesToPlot.length) {
+          statusText.textContent = `No gene matched the regex pattern(s).`;
+          statusText.classList.add("error");
+          return;
+        }
+      } else {
+        // try direct gene IDs (multiple allowed)
+        const uniqTokens = uniquePreserveOrder(tokens);
+        const found = [];
+        const notFound = [];
+
+        for (const t of uniqTokens) {
+          if (geneToIndex.has(t)) found.push(t);
+          else notFound.push(t);
+        }
+
+        if (found.length > 0) {
+          const capped = capGenesStable(found);
+          totalResolved = capped.total;
+          capApplied = capped.capped;
+          genesToPlot = capped.genes;
+          missing = notFound;
+          src = "gene";
+        } else {
+          // fallback to annotation search
+          if (!ANNO_INDEX || !ANNO_INDEX.length) {
+            statusText.textContent = `Gene ID "${geneQuery}" is not found in the database. (Annotation file not loaded)`;
+            statusText.classList.add("error");
+            return;
+          }
+          const hits = findGenesByAnnotation(geneQuery, 5000);
+          if (!hits.length) {
+            statusText.textContent = `No gene matched "${geneQuery}" (neither Gene ID nor annotation).`;
+            statusText.classList.add("error");
+            return;
+          }
+          src = "annotation";
+          const all = hits.map(h => h.gene);
+          const capped = capGenesStable(all);
+          totalResolved = hits.length;
+          capApplied = capped.capped;
+          genesToPlot = capped.genes;
+
+          // show hit list (required)
+          showAnnoChooser(genesToPlot, geneQuery, hits.length, genesToPlot.length, capApplied);
+        }
+      }
+    } catch (e) {
+      statusText.textContent = `Invalid regex: ${e && e.message ? e.message : String(e)}`;
+      statusText.classList.add("error");
+      return;
+    }
+
+    // if user typed multiple gene IDs and none were found, annotation route already handled;
+    // if some were missing, notify in status
+    const missingMsg = missing.length ? ` Not found: ${formatListForStatus(missing)}.` : "";
+    const capMsg = capApplied ? ` (showing first 500 of ${totalResolved})` : "";
+    statusText.textContent = `Resolved ${totalResolved} gene(s). Plotting ${genesToPlot.length}${capMsg}...${missingMsg}`;
+    statusText.classList.remove("error");
+
+    // update global title
+    setPlotTitle(genesToPlot, groupBy);
+
+    // reset plot container
+    plotDiv.innerHTML = "";
+    plotDiv.style.height = "auto";
+
+    // reset CURRENT state
+    CURRENT.genes = genesToPlot;
+    CURRENT.geneVecs = new Map();
+    CURRENT.filteredIdx = filteredIdx;
+    CURRENT.groupBy = groupBy;
+    CURRENT.logTransform = logTransform;
+    CURRENT.kwEnable = kwEnable;
+    CURRENT.keywords = keywords;
+
+    // Prepare table selector
+    setupTableGeneSelector(genesToPlot);
+
+    // Prepare similarity selector (clears any previous options)
+    setupSimilarityGeneSelector([]);
+
+    const plottedGenes = [];
+    const noValueGenes = [];
+
+    // Plot each gene (sequential; shard cache still works)
+    for (let i = 0; i < genesToPlot.length; i++) {
+      const gene = genesToPlot[i];
+      statusText.textContent = `Plotting ${i + 1}/${genesToPlot.length}: ${gene}...`;
+
+      // wrapper
+      const wrap = document.createElement("div");
+      wrap.className = "gene-plot-wrap";
+      wrap.id = plotWrapIdForGene(gene);
+
+      const head = document.createElement("div");
+      head.className = "gene-plot-head";
+
+      const label = document.createElement("span");
+      label.className = "gene-label";
+      label.textContent = "Gene: ";
+
+      const geneText = document.createElement("span");
+      geneText.textContent = gene;
+      label.appendChild(geneText);
+      head.appendChild(label);
+
+      const annoSpan = document.createElement("span");
+      annoSpan.className = "gene-anno";
+      if (GENE_ANNO && GENE_ANNO.has(gene)) {
+        const info = GENE_ANNO.get(gene);
+        const ath = info && info.ath ? info.ath : "NA";
+        const rice = info && info.rice ? info.rice : "NA";
+        annoSpan.textContent = `Arabidopsis annotations: ${ath} | Rice annotations: ${rice}`;
+      } else {
+        annoSpan.textContent = "";
+      }
+      head.appendChild(annoSpan);
+
+      const plotBox = document.createElement("div");
+      plotBox.className = "gene-plot-box";
+      plotBox.id = plotIdForGene(gene);
+
+      wrap.appendChild(head);
+      wrap.appendChild(plotBox);
+      plotDiv.appendChild(wrap);
+
+      try {
+        const { shardId, col } = geneToIndex.get(gene);
+        const shardObj = await loadShard(shardId);
+        if (col < 0 || col >= shardObj.geneCount) throw new Error(`Invalid col=${col} for shard ${shardId}`);
+        const geneVec = extractGeneVector(shardObj, col);
+
+        const { traces, layout } = buildTracesForGene(gene, geneVec, filteredIdx, groupBy, logTransform);
+
+        if (!traces.length) {
+          noValueGenes.push(gene);
+          plotBox.innerHTML = `<div style="padding:8px; font-size:12px; color:#b00020;">No valid values after filtering.</div>`;
+          continue;
+        }
+
+        await Plotly.newPlot(plotBox, traces, layout, { responsive: true });
+
+        // cache for table switching
+        CURRENT.geneVecs.set(gene, geneVec);
+        plottedGenes.push(gene);
+
+        // click -> sample info + table focus
+        plotBox.on("plotly_click", (eventData) => {
+          const pt = eventData.points[0];
+          const rowIndex = pt.customdata;
+          const row = metaRows[rowIndex];
+          const tpm = geneVec[rowIndex];
+
+          // switch table to this gene (minimal UX improvement)
+          const sel = document.getElementById("table-gene-select");
+          if (sel && sel.value !== gene) sel.value = gene;
+          updateTableForGene(gene);
+
+          updateSampleInfo(row, gene, tpm);
+          selectTableRowByIndex(rowIndex);
+        });
+
+      } catch (e) {
+        noValueGenes.push(gene);
+        console.error(e);
+        plotBox.innerHTML = `<div style="padding:8px; font-size:12px; color:#b00020;">Failed to plot: ${e && e.message ? e.message : String(e)}</div>`;
+      }
+    }
+
+    if (!plottedGenes.length) {
+      statusText.textContent = "No plots were generated (all genes had no valid values after filtering, or failed to load).";
+      statusText.classList.add("error");
+      document.getElementById("data-desc").textContent = "No plot yet.";
+
+      // clear similarity panel/selector for this run
+      setupSimilarityGeneSelector([]);
+      updateSimilarityPanel(null).catch(console.error);
+
+      return;
+    }
+
+    // table: show first plotted gene
+    const firstGene = plottedGenes[0];
+    const sel = document.getElementById("table-gene-select");
+    if (sel) sel.value = firstGene;
+    updateTableForGene(firstGene);
+
+    // similarity list: allow user to choose the base gene (only when multiple genes are plotted)
+    setupSimilarityGeneSelector(plottedGenes);
+    const simSel = document.getElementById("similar-gene-select");
+    if (simSel && detectCurrentGenome() === "tift" && plottedGenes.length > 1) {
+      simSel.value = firstGene; // default: first plotted gene
+    }
+    updateSimilarityPanel(firstGene).catch(console.error);
+
+    const capNote = capApplied ? ` (showing first 500 of ${totalResolved})` : "";
+    const noValNote = noValueGenes.length ? ` Genes with no values/failed: ${formatListForStatus(noValueGenes)}.` : "";
+    statusText.textContent = `Displayed ${plottedGenes.length} plot(s)${capNote}.${missingMsg}${noValNote}`;
+    statusText.classList.remove("error");
+  }
+
+
+  function makeHoverText(row, gene, rawTpm, rowIndex) {
+  const parts = [];
+
+  // Hide some identifiers in hover
+  const HIDE_IN_HOVER = new Set(["code", "row index", "rowindex", "srr", "samn"]);
+  META_COLS.forEach((col) => {
+    const k = String(col).toLowerCase().trim();
+    if (HIDE_IN_HOVER.has(k)) return;
+    parts.push(`${col}: ${row[col]}`);
+  });
+
+  parts.push(`TPM: ${rawTpm}`);
+  return parts.join("<br>");
+}
+
+  function updateSampleInfo(row, gene, tpm) {
+    const tbody = document.getElementById("sample-info-body");
+     if (!tbody) return; // info panel removed
+    tbody.innerHTML = "";
+
+    const rows = [
+      ["gene", gene],
+      ["TPM", tpm]
+    ];
+
+    META_COLS.forEach((col) => rows.push([col, row[col]]));
+
+    rows.forEach(([k, v]) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      const td = document.createElement("td");
+      th.textContent = k;
+      td.textContent = (v == null ? "" : v);
+      tr.appendChild(th);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function updateDataTable(filteredIdx, gene, geneVec, logTransform, kwEnable, keywords, groupBy) {
+  const thead = document.getElementById("data-thead");
+  const tbody = document.getElementById("data-tbody");
+  const desc = document.getElementById("data-desc");
+
+  selectedTableRow = null;
+
+  const kwText = kwEnable ? (keywords.length ? keywords.join(" ") : "(empty)") : "OFF";
+
+  // Hide some columns in the data table
+  const HIDE_IN_TABLE = new Set(["code", "row index", "rowindex"]);
+  const META_COLS_FOR_TABLE = META_COLS.filter(c => !HIDE_IN_TABLE.has(String(c).toLowerCase().trim()));
+
+  const cols = [...META_COLS_FOR_TABLE, "TPM"];
+  if (logTransform) cols.push("log10(TPM+1)");
+
+  thead.innerHTML = "";
+  const trh = document.createElement("tr");
+  cols.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c;
+
+    const lc = String(c).toLowerCase().trim();
+    if (lc === "attributes" || lc === "attribute") th.classList.add("col-attr");
+    else th.classList.add("col-small");
+
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+
+  tbody.innerHTML = "";
+
+  const validIdx = [];
+  filteredIdx.forEach((idx) => {
+    const row = metaRows[idx];
+    if (!row) return;
+    const v = geneVec[idx];
+    if (v == null || isNaN(v)) return;
+    validIdx.push(idx);
+  });
+
+  desc.textContent =
+    `Rows used: ${validIdx.length} (matched rows after filtering) / Total samples: ${metaRows.length}. ` +
+    `Metadata and "${gene}" (TPM) are shown. ` +
+    `Group by: ${groupBy}. Keyword filter: ${kwText}.`;
+
+  validIdx.forEach((idx) => {
+    const row = metaRows[idx];
+    const tr = document.createElement("tr");
+    tr.dataset.rowIndex = idx; // keep this for plot click -> table sync
+
+    META_COLS_FOR_TABLE.forEach(c => {
+      const td = document.createElement("td");
+      const v = row[c];
+      td.textContent = (v == null ? "" : v);
+
+      const lc = String(c).toLowerCase().trim();
+      if (lc === "attributes" || lc === "attribute") td.classList.add("col-attr-cell");
+
+      tr.appendChild(td);
+    });
+
+    const tpm = geneVec[idx];
+    const tdT = document.createElement("td");
+    tdT.classList.add("col-small-cell");
+    tdT.textContent = (tpm == null ? "" : tpm);
+    tr.appendChild(tdT);
+
+    if (logTransform) {
+      const tdL = document.createElement("td");
+      tdL.classList.add("col-small-cell");
+      tdL.textContent = (tpm == null || isNaN(tpm)) ? "" : (Math.log10(tpm + 1).toFixed(5));
+      tr.appendChild(tdL);
+    }
+
+    tr.addEventListener("click", () => {
+      updateSampleInfo(row, gene, tpm);
+      selectTableRow(tr);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  if (!validIdx.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = cols.length;
+    td.textContent = "No rows to display (after filtering).";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
+  function selectTableRow(tr) {
+    if (selectedTableRow) selectedTableRow.classList.remove("selected");
+    selectedTableRow = tr;
+    if (selectedTableRow) selectedTableRow.classList.add("selected");
+  }
+
+  function selectTableRowByIndex(rowIndex) {
+    const tbody = document.getElementById("data-tbody");
+    const target = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
+    if (target) {
+      selectTableRow(target);
+      target.scrollIntoView({ block: "nearest" });
+    }
+  }
+</script>
+
+</body>
+</html>
