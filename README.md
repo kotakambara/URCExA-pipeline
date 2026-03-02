@@ -1,4 +1,4 @@
-# RNA-seq → Interactive Web Database Pipeline
+# A URCExA-style
 
 This repository contains a reproducible pipeline that:
 
