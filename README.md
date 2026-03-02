@@ -51,7 +51,7 @@ Python 3 + modules:
 
 ## Quick start
 
-### 
+### What you need
 
 1) Build STAR index (example):  
 - If possible, please prepare a GTF-format annotation file and use it for generating the STAR index.　　
@@ -91,7 +91,7 @@ bash scripts/build_os_data.sh --data-dir data --threads 8
 - `data/Arab_gene_annotation_list.tsv`
 - `data/Os_gene_annotation_list.tsv`
 
-### 1) Run the pipeline
+### Run the pipeline
 
 ```bash
 ./run_pipeline.sh \
