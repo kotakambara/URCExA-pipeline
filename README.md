@@ -103,7 +103,6 @@ Here is an example command to run the pipeline:
   --gff /path/to/genes.gff3 \
   --proteins /path/to/target_species_proteins.fa \
   --title-prefix "Pearl Millet" \
-  --h1-prefix "Pearl Millet" \
   --ref-label "Tift" \
   --outdir out/PM_Tift
 ```
