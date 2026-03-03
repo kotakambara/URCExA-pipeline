@@ -15,7 +15,6 @@ Usage:
     --gff /path/to/genes.gff3 \
     --proteins /path/to/species_proteins.fa \
     --title-prefix "Foxtail Millet" \
-    --h1-prefix "Foxtail Millet" \
     --ref-label "Yugu1" \
     --outdir out/SI_Yugu1
 
@@ -26,7 +25,6 @@ Required:
   --gff          GFF3 annotation (gene features must have ID=...)
   --proteins     Protein FASTA for the target species (headers must match gene IDs)
   --title-prefix <title> prefix in HTML ("XXX RNA-seq database")
-  --h1-prefix    <h1> prefix in HTML ("XXX RNA-seq database")
   --ref-label    Label shown in HTML reference dropdown (e.g., "Yugu1")
   --outdir       Output directory (will be created)
 
@@ -88,7 +86,6 @@ while [[ $# -gt 0 ]]; do
     --gff) GFF="$2"; shift 2 ;;
     --proteins) PROTEINS="$2"; shift 2 ;;
     --title-prefix) TITLE_PREFIX="$2"; shift 2 ;;
-    --h1-prefix) H1_PREFIX="$2"; shift 2 ;;
     --ref-label) REF_LABEL="$2"; shift 2 ;;
     --outdir) OUTDIR="$2"; shift 2 ;;
     --template) TEMPLATE="$2"; shift 2 ;;
@@ -104,14 +101,15 @@ while [[ $# -gt 0 ]]; do
     *) die "Unknown argument: $1" ;;
   esac
 done
+H1_PREFIX="${TITLE_PREFIX:-}"
 
-[[ -n "$OUTDIR" ]] || { usage; die "--outdir is required"; }
-[[ -n "$PREFIX" ]] || { usage; die "--prefix is required"; }
-[[ -n "$STAR_INDEX" ]] || { usage; die "--star-index is required"; }
-[[ -n "$GFF" ]] || { usage; die "--gff is required"; }
-[[ -n "$PROTEINS" ]] || { usage; die "--proteins is required"; }
+
+[[ -n "${OUTDIR:-}" ]] || { usage; die "--outdir is required"; }
+[[ -n "${PREFIX:-}" ]] || { usage; die "--prefix is required"; }
+[[ -n "${STAR_INDEX:-}" ]] || { usage; die "--star-index is required"; }
+[[ -n "${GFF:-}" ]] || { usage; die "--gff is required"; }
+[[ -n "${PROTEINS:-}" ]] || { usage; die "--proteins is required"; }
 [[ -n "${TITLE_PREFIX:-}" ]] || { usage; die "--title-prefix is required"; }
-[[ -n "${H1_PREFIX:-}" ]] || { usage; die "--h1-prefix is required"; }
 [[ -n "${REF_LABEL:-}" ]] || { usage; die "--ref-label is required"; }
 
 if [[ -z "$SRR_LIST" ]]; then
