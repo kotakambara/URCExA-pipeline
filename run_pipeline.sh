@@ -252,9 +252,14 @@ step_map() {
     # ulimit may fail on some systems; do not crash pipeline.
     (ulimit -n 100000 || true)
 
-    bash mapping_script.sh "${WORKDIR}/tmp_list" "$PREFIX" "$STAR_INDEX" "$GFF" \
-      1>"${LOGDIR}/02_map.stdout.log" 2>"${LOGDIR}/02_map.stderr.log" || true
-
+   set +e
+   bash mapping_script.sh "${WORKDIR}/tmp_list" "$PREFIX" "$STAR_INDEX" "$GFF" \
+   1>"${LOGDIR}/02_map.stdout.log" 2>"${LOGDIR}/02_map.stderr.log"
+   rc=$?
+   set -e
+   if [[ $rc -ne 0 ]]; then
+      die "mapping_script.sh failed (exit=${rc}). See: ${LOGDIR}/02_map.stderr.log"
+   fi
     [[ -f "$tpm_csv" ]] || die "Mapping did not produce TPM matrix: $tpm_csv"
   fi
 
@@ -404,6 +409,13 @@ log "DONE"
 log "Results (CSV/TSV): $RESULTS_DIR"
 log "Website folder to upload: $SITE_DIR"
 log "Open in browser after upload: ${PREFIX}.html"
+
+# --- post-run sanity checks ---
+[[ -f "${SITE_DIR}/${PREFIX}.html" ]] || die "missing HTML: ${SITE_DIR}/${PREFIX}.html"
+for f in manifest.json meta.tsv gene_index.tsv; do
+  [[ -f "${SITE_DIR}/${f}" ]] || die "missing required site file: ${SITE_DIR}/${f} (did shard step run?)"
+done
+[[ -d "${SITE_DIR}/shards" ]] || die "missing shards/: ${SITE_DIR}/shards (did shard step run?)"
 
 if [[ $KEEP_WORK -ne 1 ]]; then
   # keep staged scripts but remove huge temp files, FASTQs etc (workdir can be very large)
