@@ -723,6 +723,14 @@ This database was constructed in the Tsugama Laboratory (<a href="https://park.i
     const statusText = document.getElementById("status-text");
     const plotBtn = document.getElementById("plot-btn");
 
+    if (location.protocol === "file:") {
+      statusText.textContent =
+        "This HTML must be opened via HTTP (not file://). Run: python3 -m http.server 8000 (in the site/ directory), then open http://127.0.0.1:8000/";
+      statusText.classList.add("error");
+      plotBtn.disabled = true;
+      return;
+}
+    
     setupReferenceGenomeSelector();
 
     const kwEnable = document.getElementById("kw-enable");
