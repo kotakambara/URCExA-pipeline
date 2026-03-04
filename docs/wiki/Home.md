@@ -1,6 +1,4 @@
-# RNA-seq DB pipeline (Wiki draft)
-
-This Wiki is a draft for GitHub Wiki. Copy each page into your GitHub Wiki repository.
+# OCExA pipeline for constructing an RNA sequencing (RNA-seq) database
 
 ## What this pipeline does
 
@@ -38,7 +36,6 @@ This pipeline turns public RNA-seq SRA runs into an interactive web database:
   --gff /path/to/genes.gff3 \
   --proteins /path/to/target_species_proteins.fa \
   --title-prefix "Foxtail Millet" \
-  --h1-prefix "Foxtail Millet" \
   --ref-label "Yugu1" \
   --outdir out/SI_Yugu1
 ```
