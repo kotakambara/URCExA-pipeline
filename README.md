@@ -78,22 +78,6 @@ python3 -m http.server 8000
 # open: http://127.0.0.1:8000/<prefix>.html
 ```
 
-### Recording versions for reproducibility
-Example (copy/paste into your log):
-
-```bash
-bash --version | head -n1
-python3 --version
-STAR --version
-samtools --version | head -n1
-featureCounts -v 2>&1 | head -n1
-blastp -version | head -n1
-fastp --version 2>&1 | head -n1
-fasterq-dump -V 2>&1 | head -n1
-prefetch -V 2>&1 | head -n1
-efetch -version 2>&1 | head -n1 || true
-```
-
 ## Repository layout
 
 ```
