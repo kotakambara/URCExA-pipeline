@@ -39,6 +39,61 @@ Python 3 + modules:
 
 > Tip: consider using conda/mamba and recording exact versions for reproducibility.
 
+## Execution environment (assumptions)
+
+### Supported platforms
+- **Linux (x86_64)** is required.
+- **WSL2 (Ubuntu/Debian on Windows)** should work (treated as Linux), but Windows-native execution is **not supported**.
+- macOS is not officially supported/tested.
+
+### Shell / filesystem assumptions
+- `bash` (recommended: bash 4+)
+- Standard GNU userland tools: `grep`, `sed`, `awk`, `cut`, `sort`, `paste`, `gzip`, etc.
+- A large, writable working directory is required (SRA FASTQs can be very large).
+  - **WSL note**: for performance, prefer working under the Linux filesystem (e.g. `/home/...`) rather than `/mnt/c/...`.
+
+### Additional external tools used by scripts
+In addition to the tools listed above, some scripts may call:
+
+- SRA Toolkit: `prefetch`, `fasterq-dump`
+- NCBI Entrez Direct (recommended): `efetch`, `xtract`
+- Decompression helper (optional): `pbzip2` (otherwise `bzip2`)
+
+### Resource requirements (rule of thumb)
+- **Disk**: can exceed **tens to hundreds of GB** depending on the number of samples.
+- **RAM**: mainly depends on STAR index size (small plant genomes may fit in 8–16 GB; large genomes can require more).
+- **CPU**: STAR/featureCounts/fasterq-dump can use multiple threads (some thread counts are currently fixed in scripts).
+
+### Network / rate limits
+- Requires outbound HTTPS access to NCBI/SRA and (optionally) DDBJ endpoints.
+- Heavy use of NCBI e-utils may be throttled; for quick tests, consider `--max-samples`.
+
+### Viewing the generated website (IMPORTANT)
+The generated `out/<prefix>/site/` directory is a **static website** that loads `manifest.json`, `meta.tsv`,
+`gene_index.tsv`, and `shards/*` via browser requests. For local testing, open it via **HTTP** (not `file://`).
+
+```bash
+cd out/<prefix>/site
+python3 -m http.server 8000
+# open: http://127.0.0.1:8000/<prefix>.html
+```
+
+### Recording versions for reproducibility
+Example (copy/paste into your log):
+
+```bash
+bash --version | head -n1
+python3 --version
+STAR --version
+samtools --version | head -n1
+featureCounts -v 2>&1 | head -n1
+blastp -version | head -n1
+fastp --version 2>&1 | head -n1
+fasterq-dump -V 2>&1 | head -n1
+prefetch -V 2>&1 | head -n1
+efetch -version 2>&1 | head -n1 || true
+```
+
 ## Repository layout
 
 ```
@@ -50,8 +105,6 @@ Python 3 + modules:
 ```
 
 ## Quick start
-
-### 
 
 1) Build STAR index (example):  
 - If possible, please prepare a GTF-format annotation file and use it for generating the STAR index.　　
